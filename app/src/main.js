@@ -1,51 +1,73 @@
-// Wires the page: pick a photo, type a caption, export the square cover as a PNG. A `?shot=` query sets up a fixed
-// scene for a screenshot instead (./shots.js).
-import { drawCover } from './cover.js';
+// Boots Ember Cover Art: loads the samples, wires the editor, paints the
+// live preview. A `?shot=` query sets up a fixed scene for a screenshot
+// instead (./shots.js); the export button saves the cover as a PNG.
+
+import { defaultState, sizeById, History, copyState } from './state.js';
+import { PhotoStore } from './photos.js';
+import { wireEditor } from './editor.js';
+import { renderCover } from './cover.js';
 import { runShot } from './shots.js';
 
 const canvas = document.getElementById('cover');
-const caption = document.getElementById('caption');
-const status = document.getElementById('status');
-let photo = null;
+const statusEl = document.getElementById('status');
+let state = defaultState();
+const photos = new PhotoStore();
+const history = new History(state);
 
-function redraw() {
-  drawCover(canvas, photo, caption.value);
+/** Writes a one-line status under the export buttons. */
+export function setStatus(text) {
+  statusEl.textContent = text;
 }
 
-/** Loads an image from a URL, resolving to the image once it can be drawn. */
-export function loadImage(url) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = url;
-  });
+/** Repaints the preview canvas at the state's post size. */
+export function redraw() {
+  const size = sizeById(state.size);
+  if (canvas.width !== size.w || canvas.height !== size.h) {
+    canvas.width = size.w;
+    canvas.height = size.h;
+  }
+  renderCover(canvas, state, photos);
+  window.__ember = {
+    state,
+    photos,
+    redraw,
+    renderCover,
+    exportPng: async () => {
+      const off = document.createElement('canvas');
+      off.width = size.w;
+      off.height = size.h;
+      renderCover(off, state, photos);
+      return new Promise((resolve) => off.toBlob(resolve, 'image/png'));
+    },
+  };
 }
 
-document.getElementById('photo').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  photo = await loadImage(URL.createObjectURL(file));
-  redraw();
-});
-caption.addEventListener('input', redraw);
-document.getElementById('export').addEventListener('click', () => {
-  canvas.toBlob((blob) => {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'cover-1080x1080.png';
-    a.click();
-    status.textContent = 'Saved cover-1080x1080.png';
-  }, 'image/png');
+const editor = wireEditor({
+  canvas,
+  getState: () => state,
+  setState: (next) => { state = next; },
+  photos,
+  history,
+  redraw,
+  status: setStatus,
 });
 
-const shot = new URLSearchParams(location.search).get('shot');
-if (shot) {
-  runShot(shot, new URLSearchParams(location.search), async (sample, text) => {
-    photo = await loadImage(sample);
-    caption.value = text;
-    redraw();
+const params = new URLSearchParams(location.search);
+if (params.get('shot')) {
+  await runShot(params.get('shot'), params, {
+    getState: () => state,
+    applyState: (next) => {
+      state = next;
+      history.push(copyState(next));
+      editor.syncControls();
+    },
+    photos,
+    redraw,
   });
 } else {
+  // A fresh visitor starts with the Boulevard sample already in the panels.
+  await photos.addSample('boulevard');
+  await photos.addSample('pier');
+  editor.syncControls();
   redraw();
 }

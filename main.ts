@@ -1,11 +1,11 @@
-// A working gta6-cover-art-01 entry (Node 22, standard library only): the app is this directory's app/ folder, plain
-// static files a desktop browser loads offline (app/index.html and its ES modules, no library and no network
-// request), and the program hands it in. It copies app/ and screenshots/ from beside this file to /output and writes
-// /output/dossier.json, the summary the judge reads, with the vendored make.fun library. Only the plumbing, not the
-// cover art the bounty asks for: Cover Snap, a plain one-photo square cover with a sunset tint and a bold caption,
-// exported as a 1080 x 1080 PNG. Its two sample photos (app/samples/) were made for make.fun with an image model and
-// are free to use. Build your own GTA-style cover maker in its place, put your 3 or 4 PNG or JPEG screenshots in
-// screenshots/ (the first by name is the cover) and run it.
+// Ember Cover Art — a gta6-cover-art-01 entry (Node 22, standard library only): the app is this directory's app/
+// folder, plain static files a desktop browser loads offline (app/index.html and its ES modules, no library and no
+// network request), and the program hands it in. It copies app/ and screenshots/ from beside this file to /output
+// and writes /output/dossier.json, the summary the judge reads, with the vendored make.fun library. The app turns a
+// photo and a caption into multi-panel poster art — six layouts, five sunset/neon grades, per-panel crop and pan,
+// gradient title lettering, heat stars and a badge ribbon — exported as a PNG in 1080x1080, 1080x1350 or 1920x1080.
+// Its two sample photos (app/samples/) were made for make.fun with an image model and are free to use. Put your 3
+// or 4 PNG or JPEG screenshots in screenshots/ (the first by name is the cover) and run it.
 //
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
