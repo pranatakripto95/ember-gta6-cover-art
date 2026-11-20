@@ -44,6 +44,9 @@ input[type=text] {
   font: inherit; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--line);
   background: var(--panel2); color: var(--ink);
 }
+input[type=text]:focus, button:focus-visible, input[type=range]:focus-visible {
+  outline: 2px solid var(--gold); outline-offset: 2px;
+}
 input[type=range] { width: 100%; accent-color: var(--pink); }
 .filebtn {
   display: block; text-align: center; padding: 11px; border-radius: 8px; cursor: pointer;
@@ -60,6 +63,9 @@ button.primary {
   background: linear-gradient(90deg, var(--pink), var(--orange)); border: 0; color: #fff;
   font-size: 17px; padding: 13px;
 }
+#randomLook {
+  background: linear-gradient(90deg, var(--teal), #7b2ff7); border: 0; color: #fff;
+}
 .row { display: flex; gap: 8px; flex-wrap: wrap; }
 .row button { flex: 1; font-size: 13px; }
 .sample-row { display: flex; gap: 8px; margin-top: 8px; }
@@ -69,11 +75,17 @@ button.primary {
 .choice-grid button { font-size: 13px; padding: 8px 6px; }
 .choice-grid button .swatch { display: block; height: 10px; border-radius: 5px; margin-bottom: 5px; }
 .thumbs { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.thumb { position: relative; display: inline-block; }
 .thumbs img {
   width: 64px; height: 64px; object-fit: cover; border-radius: 8px; cursor: pointer;
-  border: 2px solid transparent;
+  border: 2px solid transparent; display: block;
 }
 .thumbs img.selected { border-color: var(--gold); }
+.thumb-remove {
+  position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; padding: 0;
+  border-radius: 50%; font-size: 13px; line-height: 18px; text-align: center;
+  background: var(--pink); border: 1px solid #fff; color: #fff;
+}
 .checks { display: flex; gap: 16px; flex-wrap: wrap; }
 .checks label { flex-direction: row; align-items: center; gap: 6px; font-weight: 500; margin: 0; }
 .export { display: flex; flex-direction: column; gap: 8px; }

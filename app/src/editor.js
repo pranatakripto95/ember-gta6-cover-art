@@ -1,12 +1,14 @@
 // Editor wiring: buttons, sliders, thumbnails and dragging on the preview,
 // all of it driving one state object and re-rendering the live preview.
+// Presets apply a whole look in one tap; Randomize rolls a fresh layout
+// and grade; Ctrl/Cmd+Z undoes and Ctrl/Cmd+Shift+Z (or Ctrl+Y) redoes.
 
 import { GRADES } from './grades.js';
 import { LAYOUTS, layoutById, layoutPanels } from './layouts.js';
-import { SIZES, sizeById, panelCount, clampSelection, copyState } from './state.js';
+import { SIZES, sizeById, PRESETS, presetById, applyPreset, panelCount, clampSelection, copyState } from './state.js';
 import { SAMPLES } from './photos.js';
 import { renderCover } from './cover.js';
-import { smartCropAll } from './facecrop.js';
+import { smartCropAll, smartCropPanel } from './facecrop.js';
 
 /** Builds a button that picks one value from a list and marks itself active. */
 export function choiceButtons(container, items, current, onPick, labelOf) {
@@ -22,6 +24,16 @@ export function choiceButtons(container, items, current, onPick, labelOf) {
   });
 }
 
+/** A random layout and grade, different from the ones the state already has. */
+export function randomLook(state) {
+  const layout = LAYOUTS[Math.floor(Math.random() * LAYOUTS.length)];
+  let grade = GRADES[Math.floor(Math.random() * GRADES.length)];
+  if (grade.id === state.grade && GRADES.length > 1) {
+    grade = GRADES[(GRADES.indexOf(grade) + 1) % GRADES.length];
+  }
+  return { layout: layout.id, grade: grade.id };
+}
+
 /**
  * Wires the whole editor. `deps` carries the canvas, the state, the photo
  * store, the history and a `redraw` that repaints the preview.
@@ -32,9 +44,10 @@ export function wireEditor(deps) {
   const els = {
     filePhotos: $('filePhotos'), thumbs: $('thumbs'),
     layoutBtns: $('layoutBtns'), gradeBtns: $('gradeBtns'), sizeBtns: $('sizeBtns'),
+    presetBtns: $('presetBtns'),
     panelBtns: $('panelBtns'), panelName: $('panelName'),
     zoom: $('zoom'), zoomVal: $('zoomVal'), panX: $('panX'), panY: $('panY'),
-    title: $('title'), subtitle: $('subtitle'), badge: $('badge'),
+    title: $('title'), subtitle: $('subtitle'), kicker: $('kicker'), badge: $('badge'),
     stars: $('stars'), starsVal: $('starsVal'),
     grain: $('grain'), vignette: $('vignette'), frame: $('frame'),
   };
@@ -43,6 +56,7 @@ export function wireEditor(deps) {
   function syncControls() {
     const s = getState();
     clampSelection(s);
+    choiceButtons(els.presetBtns, PRESETS, null, (id) => usePreset(id), (p) => p.name);
     choiceButtons(els.layoutBtns, LAYOUTS, s.layout, (id) => change({ layout: id }), (l) => l.name);
     choiceButtons(els.gradeBtns, GRADES, s.grade, (id) => change({ grade: id }), (g) =>
       `<span class="swatch" style="background:linear-gradient(90deg, ${g.sky.join(',')})"></span>${g.name}`);
@@ -65,6 +79,7 @@ export function wireEditor(deps) {
     els.panY.value = String(panel.oy);
     els.title.value = s.title;
     els.subtitle.value = s.subtitle;
+    els.kicker.value = s.kicker || '';
     els.badge.value = s.badge;
     els.stars.value = String(s.stars);
     els.starsVal.textContent = `${s.stars} / 5`;
@@ -82,6 +97,8 @@ export function wireEditor(deps) {
     photos.ids().forEach((id) => {
       const img = photos.get(id);
       if (!img) return;
+      const wrap = document.createElement('span');
+      wrap.className = 'thumb';
       const thumb = document.createElement('img');
       thumb.src = img.src;
       thumb.alt = photos.name(id);
@@ -92,7 +109,25 @@ export function wireEditor(deps) {
         next.panels[next.selectedPanel].photo = id;
         change(next);
       });
-      els.thumbs.appendChild(thumb);
+      wrap.appendChild(thumb);
+      const isSample = SAMPLES.some((x) => x.id === id);
+      if (!isSample) {
+        const rm = document.createElement('button');
+        rm.type = 'button';
+        rm.className = 'thumb-remove';
+        rm.textContent = '×';
+        rm.title = `Remove ${photos.name(id)}`;
+        rm.addEventListener('click', (e) => {
+          e.stopPropagation();
+          photos.remove(id);
+          const next = getState();
+          next.panels.forEach((p) => { if (p.photo === id) p.photo = null; });
+          change(next);
+          status(`Removed ${photos.name(id)}.`);
+        });
+        wrap.appendChild(rm);
+      }
+      els.thumbs.appendChild(wrap);
     });
   }
 
@@ -109,6 +144,18 @@ export function wireEditor(deps) {
   /** Records the current state after a slider settles (one history step). */
   function commit() {
     history.push(copyState(getState()));
+  }
+
+  /** Applies a named preset: layout, grade, size and caption in one tap. */
+  function usePreset(id) {
+    const preset = presetById(id);
+    if (!preset) return;
+    const next = applyPreset(getState(), id);
+    history.push(next);
+    setState(next);
+    syncControls();
+    redraw();
+    status(`Preset “${preset.name}” applied.`);
   }
 
   // Photos: files from the machine, and the two bundled samples.
@@ -158,6 +205,12 @@ export function wireEditor(deps) {
     change(s);
     status('Faces centred in every panel.');
   });
+  $('randomLook').addEventListener('click', () => {
+    const s = getState();
+    const look = randomLook(s);
+    change(look);
+    status(`New look: ${layoutById(look.layout).name} + ${GRADES.find((g) => g.id === look.grade).name}.`);
+  });
 
   // Selected panel: zoom and pan sliders.
   els.zoom.addEventListener('input', () => {
@@ -188,13 +241,30 @@ export function wireEditor(deps) {
     p.ox = 0; p.oy = 0; p.zoom = 1.15;
     change(s);
   });
-  $('undoBtn').addEventListener('click', () => {
+  $('cropPanel').addEventListener('click', () => {
+    const s = getState();
+    const size = sizeById(s.size);
+    const rects = layoutPanels(s.layout, size.w, size.h);
+    smartCropPanel(s, photos, s.selectedPanel, rects[s.selectedPanel]);
+    change(s);
+    status(`Face centred in panel ${s.selectedPanel + 1}.`);
+  });
+  $('undoBtn').addEventListener('click', undo);
+  $('redoBtn').addEventListener('click', redo);
+  function undo() {
     const prev = history.undo();
     if (prev) { setState(prev); syncControls(); redraw(); }
-  });
-  $('redoBtn').addEventListener('click', () => {
+  }
+  function redo() {
     const next = history.redo();
     if (next) { setState(next); syncControls(); redraw(); }
+  }
+  // Keyboard: Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z or Ctrl+Y redo.
+  document.addEventListener('keydown', (e) => {
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea') return;
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+    if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
   });
 
   // Caption fields and toggles.
@@ -202,6 +272,8 @@ export function wireEditor(deps) {
   els.title.addEventListener('change', commit);
   els.subtitle.addEventListener('input', () => { const s = getState(); s.subtitle = els.subtitle.value; setState(s); redraw(); });
   els.subtitle.addEventListener('change', commit);
+  els.kicker.addEventListener('input', () => { const s = getState(); s.kicker = els.kicker.value; setState(s); redraw(); });
+  els.kicker.addEventListener('change', commit);
   els.badge.addEventListener('input', () => { const s = getState(); s.badge = els.badge.value; setState(s); redraw(); });
   els.badge.addEventListener('change', commit);
   els.stars.addEventListener('input', () => {
@@ -289,5 +361,5 @@ export function wireEditor(deps) {
   }
 
   syncControls();
-  return { syncControls, change, exportSize };
+  return { syncControls, change, exportSize, usePreset };
 }

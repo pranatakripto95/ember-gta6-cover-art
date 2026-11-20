@@ -1,5 +1,6 @@
 // Cover state: one plain object describes a whole cover, so undo and redo
-// are just snapshots of it, and the export is just a render of it.
+// are just snapshots of it, and the export is just a render of it. Presets
+// are named starting points — a layout, a grade and a caption in one tap.
 
 import { LAYOUTS, layoutById } from './layouts.js';
 
@@ -28,6 +29,7 @@ export function defaultState() {
     size: '1080x1080',
     title: 'NEON SHORE',
     subtitle: 'a sunset coast story',
+    kicker: 'VICE CITY • 2026',
     badge: 'SUNSET COAST',
     stars: 4,
     grain: true,
@@ -46,6 +48,62 @@ export function defaultState() {
       defaultPanel('boulevard'),
     ],
   };
+}
+
+/** One-tap starting points: layout + grade + caption, photos untouched. */
+export const PRESETS = [
+  {
+    id: 'golden-hero', name: 'Golden Hero',
+    layout: 'hero3', grade: 'golden', size: '1080x1350',
+    title: 'GOLDEN HOUR', subtitle: 'one last cast at dusk',
+    kicker: 'VICE CITY • 2026', badge: 'GOLDEN HOUR', stars: 5,
+  },
+  {
+    id: 'neon-grid', name: 'Neon Grid',
+    layout: 'grid4', grade: 'neon', size: '1080x1080',
+    title: 'NEON SHORE', subtitle: 'a sunset coast story',
+    kicker: 'AFTER DARK', badge: 'NEON NIGHTS', stars: 4,
+  },
+  {
+    id: 'sunset-tilt', name: 'Sunset Snaps',
+    layout: 'tilted', grade: 'sunset', size: '1920x1080',
+    title: 'BOULEVARD QUEEN', subtitle: 'golden hour on the strip',
+    kicker: 'VICE CITY • 2026', badge: 'SUNSET COAST', stars: 4,
+  },
+  {
+    id: 'candy-duo', name: 'Candy Duo',
+    layout: 'duo', grade: 'candy', size: '1080x1080',
+    title: 'CANDY RUSH', subtitle: 'sweet like the strip at night',
+    kicker: 'VICE CITY • 2026', badge: 'CANDY RUSH', stars: 5,
+  },
+  {
+    id: 'dusk-banner', name: 'Dusk Banner',
+    layout: 'banner', grade: 'dusk', size: '1920x1080',
+    title: 'EMBER DUSK', subtitle: 'the coast burns pink tonight',
+    kicker: 'VICE CITY • 2026', badge: 'EMBER DUSK', stars: 3,
+  },
+];
+
+/** Finds a preset by id, or null. */
+export function presetById(id) {
+  return PRESETS.find((p) => p.id === id) || null;
+}
+
+/** Returns a state with a preset applied; the photos stay exactly as they are. */
+export function applyPreset(state, id) {
+  const preset = presetById(id);
+  if (!preset) return state;
+  const next = copyState(state);
+  next.layout = preset.layout;
+  next.grade = preset.grade;
+  next.size = preset.size;
+  next.title = preset.title;
+  next.subtitle = preset.subtitle;
+  next.kicker = preset.kicker;
+  next.badge = preset.badge;
+  next.stars = preset.stars;
+  clampSelection(next);
+  return next;
 }
 
 /** How many panels the current layout actually shows. */

@@ -13,7 +13,7 @@
   <p class="tagline">Your photo. Your caption. A poster worth posting.</p>
   <ol class="steps">
     <li><b>1</b> Add a photo</li>
-    <li><b>2</b> Pick a layout</li>
+    <li><b>2</b> Pick a look</li>
     <li><b>3</b> Export the PNG</li>
   </ol>
 </header>
@@ -38,6 +38,15 @@
     </section>
 
     <section class="group">
+      <h2>One-tap looks</h2>
+      <p class="hint">A preset sets the layout, grade, size and caption at once.</p>
+      <div id="presetBtns" class="choice-grid" role="group" aria-label="Preset looks"></div>
+      <div class="row">
+        <button id="randomLook" type="button">Surprise me — random look</button>
+      </div>
+    </section>
+
+    <section class="group">
       <h2>Layout</h2>
       <div id="layoutBtns" class="choice-grid" role="group" aria-label="Panel layout"></div>
     </section>
@@ -52,10 +61,11 @@
       <label>Move up / down <input id="panY" type="range" min="-0.5" max="0.5" step="0.01" value="0"></label>
       <div class="row">
         <button id="centrePanel" type="button">Centre this photo</button>
+        <button id="cropPanel" type="button">Smart-crop this panel</button>
         <button id="undoBtn" type="button">Undo</button>
         <button id="redoBtn" type="button">Redo</button>
       </div>
-      <p class="hint">Tip: drag the photo inside the preview to move it, scroll over it to zoom.</p>
+      <p class="hint">Tip: drag the photo inside the preview to move it, scroll over it to zoom. Ctrl+Z undoes, Ctrl+Y redoes.</p>
     </section>
 
     <section class="group">
@@ -66,6 +76,7 @@
     <section class="group">
       <h2>Caption</h2>
       <label>Title <input id="title" type="text" maxlength="48" value="NEON SHORE"></label>
+      <label>Kicker line (small caps) <input id="kicker" type="text" maxlength="32" value="VICE CITY • 2026"></label>
       <label>Subtitle (script) <input id="subtitle" type="text" maxlength="48" value="a sunset coast story"></label>
       <label>Badge ribbon <input id="badge" type="text" maxlength="24" value="SUNSET COAST"></label>
       <label>Heat stars <span id="starsVal">4 / 5</span>

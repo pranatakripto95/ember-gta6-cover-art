@@ -1,5 +1,7 @@
-// Lettering: the poster's title block, neon script subtitle, badge ribbon and
-// heat stars — all drawn in code, no font files, no game artwork.
+// Lettering: the poster's title block, neon script subtitle, kicker line,
+// badge ribbon and heat stars — all drawn in code, no font files, no game
+// artwork. The kicker is a small tracked-out caps line above the subtitle;
+// a gradient bar under the title ties the block together.
 
 /** Splits a title into at most two centred lines that fit `maxWidth`. */
 export function wrapTitle(ctx, text, maxWidth, startSize) {
@@ -38,6 +40,11 @@ export function scriptFont(size) {
   return `italic 700 ${size}px "Segoe Script", "Brush Script MT", "Snell Roundhand", cursive`;
 }
 
+/** The tracked-out caps face for the kicker line. */
+export function kickerFont(size) {
+  return `800 ${size}px "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;
+}
+
 /**
  * Draws the title lines centred at `cx`, the first line's baseline at `y`,
  * filled with a vertical gradient and edged in white over black.
@@ -71,6 +78,26 @@ export function drawTitle(ctx, lines, size, cx, y, colours) {
   try { ctx.letterSpacing = '0px'; } catch { /* ignore */ }
 }
 
+/**
+ * A short gradient bar under the title, as wide as the widest title line,
+ * that anchors the title block. Returns the bar's width, for layout.
+ */
+export function drawTitleBar(ctx, lines, size, cx, y, colours) {
+  if (!lines.length) return 0;
+  ctx.save();
+  ctx.font = titleFont(size);
+  const widest = Math.max(...lines.map((l) => ctx.measureText(l).width));
+  const barW = Math.min(widest * 0.62, ctx.canvas.width * 0.5);
+  const barH = Math.max(4, size * 0.07);
+  const grad = ctx.createLinearGradient(cx - barW / 2, 0, cx + barW / 2, 0);
+  colours.forEach((c, i) => grad.addColorStop(i / Math.max(1, colours.length - 1), c));
+  ctx.fillStyle = grad;
+  roundRectPath(ctx, cx - barW / 2, y, barW, barH, barH / 2);
+  ctx.fill();
+  ctx.restore();
+  return barW;
+}
+
 /** Draws the glowing script subtitle centred at (`cx`, `y`). */
 export function drawSubtitle(ctx, text, size, cx, y, colour) {
   if (!text.trim()) return;
@@ -85,6 +112,27 @@ export function drawSubtitle(ctx, text, size, cx, y, colour) {
   ctx.fillStyle = colour;
   ctx.fillText(text.trim(), cx, y);
   ctx.restore();
+}
+
+/**
+ * Draws the kicker — a small tracked-out caps line — centred at (`cx`, `y`).
+ * Returns the height it took, so the title block can stack below it.
+ */
+export function drawKicker(ctx, text, size, cx, y, colour) {
+  const label = text.trim().toUpperCase();
+  if (!label) return 0;
+  ctx.save();
+  ctx.font = kickerFont(size);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  try { ctx.letterSpacing = `${Math.max(2, size * 0.28)}px`; } catch { /* older canvas */ }
+  ctx.fillStyle = colour;
+  ctx.shadowColor = 'rgba(0,0,0,0.5)';
+  ctx.shadowBlur = size * 0.5;
+  ctx.fillText(label, cx, y);
+  ctx.restore();
+  try { ctx.letterSpacing = '0px'; } catch { /* ignore */ }
+  return size * 1.2;
 }
 
 /** A five-pointed star path centred at (`cx`, `cy`) with outer radius `r`. */
@@ -123,14 +171,22 @@ export function drawStars(ctx, count, w) {
   }
 }
 
-/** Draws the tilted badge ribbon at top left with the badge words on it. */
+/**
+ * Draws the tilted badge ribbon at top left with the badge words on it.
+ * Long badges shrink their type so the ribbon never runs off the cover.
+ */
 export function drawBadge(ctx, text, w, h) {
   const label = text.trim().toUpperCase();
   if (!label) return;
-  const size = Math.max(13, w * 0.022);
+  let size = Math.max(13, w * 0.022);
   ctx.save();
-  ctx.font = `900 ${size}px "Arial Black", Impact, sans-serif`;
-  const tw = ctx.measureText(label).width;
+  const measure = (sz) => {
+    ctx.font = `900 ${sz}px "Arial Black", Impact, sans-serif`;
+    return ctx.measureText(label).width;
+  };
+  const maxW = w * 0.42;
+  while (measure(size) + size * 2.2 > maxW && size > 10) size -= 1;
+  const tw = measure(size);
   const bw = tw + size * 2.2;
   const bh = size * 2.1;
   ctx.translate(w * 0.03, h * 0.018);

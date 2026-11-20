@@ -1,9 +1,11 @@
-// The cover renderer: paints sky, photo panels, grade wash, grain, vignette
-// and the title block onto any canvas at any of the three post sizes.
+// The cover renderer: paints sky, sun rays, photo panels, grade wash, grain,
+// vignette and the title block onto any canvas at any of the three post
+// sizes. The title block stacks kicker, script subtitle, big gradient title
+// and a gradient bar, anchored from the bottom so it never clips.
 
 import { gradeById } from './grades.js';
 import { layoutPanels, titleBandTop } from './layouts.js';
-import { wrapTitle, titleFont, drawTitle, drawSubtitle, drawStars, drawBadge } from './lettering.js';
+import { wrapTitle, titleFont, drawTitle, drawTitleBar, drawSubtitle, drawKicker, drawStars, drawBadge } from './lettering.js';
 
 /** Deterministic pseudo-random numbers, so grain looks the same every export. */
 export function mulberry32(seed) {
@@ -50,8 +52,29 @@ export function drawPanelPhoto(ctx, photo, rect, panel, grade) {
 }
 
 /**
+ * Sun rays: translucent wedges fanning out from the sun disc, so the sky
+ * reads as a poster sunset even where no panel covers it.
+ */
+export function drawSunRays(ctx, sunX, sunY, sunR, colour, w, h) {
+  const rays = 12;
+  ctx.save();
+  ctx.fillStyle = colour;
+  for (let i = 0; i < rays; i += 1) {
+    const a0 = (i / rays) * Math.PI * 2;
+    const a1 = a0 + (Math.PI * 2 / rays) * 0.45;
+    const len = Math.max(w, h) * 1.2;
+    ctx.beginPath();
+    ctx.moveTo(sunX, sunY);
+    ctx.arc(sunX, sunY, len, a0, a1);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/**
  * Renders the whole cover onto `canvas` at its own size.
- * `state` holds layout, grade, title, subtitle, badge, stars, grain,
+ * `state` holds layout, grade, title, subtitle, kicker, badge, stars, grain,
  * vignette, frame and panels; `photos` maps a photo id to an image element.
  */
 export function renderCover(canvas, state, photos) {
@@ -70,6 +93,8 @@ export function renderCover(canvas, state, photos) {
   const sunX = w * 0.76;
   const sunY = h * 0.16;
   const sunR = Math.min(w, h) * 0.085;
+  // Rays first, then the glow, then the disc itself on top.
+  drawSunRays(ctx, sunX, sunY, sunR, grade.rays || 'rgba(255,255,255,0.10)', w, h);
   const glow = ctx.createRadialGradient(sunX, sunY, sunR * 0.2, sunX, sunY, sunR * 3.2);
   glow.addColorStop(0, grade.sun);
   glow.addColorStop(1, 'rgba(255, 255, 255, 0)');
@@ -81,6 +106,13 @@ export function renderCover(canvas, state, photos) {
   ctx.beginPath();
   ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2);
   ctx.fill();
+  // Horizon glow: a soft band where the sky meets the title block.
+  const horizon = ctx.createLinearGradient(0, bandTop - h * 0.12, 0, bandTop + h * 0.04);
+  horizon.addColorStop(0, 'rgba(255,255,255,0)');
+  horizon.addColorStop(0.5, grade.horizon || 'rgba(255,255,255,0.20)');
+  horizon.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = horizon;
+  ctx.fillRect(0, bandTop - h * 0.12, w, h * 0.16);
 
   // Photo panels, each clipped to its rect (tilted ones rotated in place).
   ctx.save();
@@ -106,6 +138,9 @@ export function renderCover(canvas, state, photos) {
     ctx.rect(rect.x - pad, rect.y - pad, rect.w + pad * 2, rect.h + pad + bottomPad);
     ctx.clip();
     drawPanelPhoto(ctx, photo, rect, panel, grade);
+    // A bright top edge inside each panel, like light catching the print.
+    ctx.fillStyle = 'rgba(255,255,255,0.14)';
+    ctx.fillRect(rect.x - pad, rect.y - pad, rect.w + pad * 2, Math.max(2, h * 0.006));
     ctx.restore();
     // Panel frame: white edge, thicker polaroid edge for tilted snapshots.
     ctx.save();
@@ -160,7 +195,8 @@ export function renderCover(canvas, state, photos) {
     ctx.fillRect(0, 0, w, h);
   }
 
-  // Title block: dark band, script subtitle, then the big gradient title.
+  // Title block: dark band, then kicker, script subtitle, the big gradient
+  // title and a gradient bar — anchored from the bottom so nothing clips.
   const band = ctx.createLinearGradient(0, bandTop - h * 0.06, 0, h);
   band.addColorStop(0, 'rgba(12, 4, 20, 0)');
   band.addColorStop(0.35, 'rgba(12, 4, 20, 0.72)');
@@ -168,19 +204,27 @@ export function renderCover(canvas, state, photos) {
   ctx.fillStyle = band;
   ctx.fillRect(0, bandTop - h * 0.06, w, h - bandTop + h * 0.06);
   const bandH = h - bandTop;
-  const subSize = Math.max(18, h * 0.038);
-  const subY = bandTop + bandH * 0.16;
-  drawSubtitle(ctx, state.subtitle, subSize, w / 2, subY, grade.subtitle);
   const titleStart = Math.min(w * 0.095, h * 0.095);
   ctx.font = titleFont(titleStart);
   const wrapped = wrapTitle(ctx, state.title, w * 0.92, titleStart);
   // Two lines get a smaller face so both baselines stay inside the band.
-  // The block is anchored from the bottom, so the last line never clips.
   const size = wrapped.lines.length > 1 ? Math.min(wrapped.size, bandH * 0.30) : wrapped.size;
   const lines = wrapped.lines;
-  const lastBaseline = h - bandH * 0.14;
+  const barH = Math.max(4, size * 0.07);
+  const barGap = size * 0.28;
+  const lastBaseline = h - bandH * 0.14 - barH - barGap;
   const titleY = lastBaseline - (lines.length - 1) * size * 1.04;
+  // The subtitle and kicker stack above the title's cap height, never on
+  // its baseline: titleTop is where the first line's glyphs actually start.
+  const titleTop = titleY - size * 0.78;
+  const subSize = Math.max(18, h * 0.038);
+  const subY = titleTop - subSize * 0.45;
+  const kickSize = Math.max(13, h * 0.021);
+  const kickY = subY - subSize * 0.85;
+  drawKicker(ctx, state.kicker || '', kickSize, w / 2, kickY, grade.subtitle);
+  drawSubtitle(ctx, state.subtitle, subSize, w / 2, subY, grade.subtitle);
   drawTitle(ctx, lines, size, w / 2, titleY, grade.title);
+  drawTitleBar(ctx, lines, size, w / 2, lastBaseline + barGap, grade.title);
 
   // Poster frame first, so its inner line never crosses the badge or stars.
   if (state.frame) {

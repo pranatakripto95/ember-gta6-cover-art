@@ -1,5 +1,6 @@
 // Photos: the two free sample photos bundled with the app, plus any photo
-// the person adds from their own machine. Nothing is ever uploaded.
+// the person adds from their own machine. Nothing is ever uploaded. Uploaded
+// photos can be removed again; their object URLs are revoked when they go.
 
 /** The bundled samples (made with an image model for this app, free to use). */
 export const SAMPLES = [
@@ -25,6 +26,7 @@ export class PhotoStore {
   constructor() {
     this.images = new Map();
     this.order = [];
+    this.urls = new Map();
     this.uploadCount = 0;
   }
 
@@ -43,9 +45,32 @@ export class PhotoStore {
   async addFile(file) {
     const id = `upload-${this.uploadCount += 1}`;
     const url = URL.createObjectURL(file);
-    this.images.set(id, await loadImage(url));
+    this.urls.set(id, url);
+    try {
+      this.images.set(id, await loadImage(url));
+    } catch (e) {
+      URL.revokeObjectURL(url);
+      this.urls.delete(id);
+      throw e;
+    }
     this.order.push(id);
     return id;
+  }
+
+  /**
+   * Removes a photo from the store (uploads only; samples stay available).
+   * Returns true when something was removed.
+   */
+  remove(id) {
+    if (!this.images.has(id) || SAMPLES.some((s) => s.id === id)) return false;
+    this.images.delete(id);
+    this.order = this.order.filter((x) => x !== id);
+    const url = this.urls.get(id);
+    if (url) {
+      URL.revokeObjectURL(url);
+      this.urls.delete(id);
+    }
+    return true;
   }
 
   /** The image for an id, or null. */
@@ -56,6 +81,11 @@ export class PhotoStore {
   /** Every photo's id, in the order added. */
   ids() {
     return [...this.order];
+  }
+
+  /** How many photos the store holds. */
+  count() {
+    return this.order.length;
   }
 
   /** A short display name for a thumbnail's tooltip. */

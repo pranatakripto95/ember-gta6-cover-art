@@ -1,8 +1,9 @@
 // Boots Ember Cover Art: loads the samples, wires the editor, paints the
 // live preview. A `?shot=` query sets up a fixed scene for a screenshot
 // instead (./shots.js); the export button saves the cover as a PNG.
+// A `?preset=` query opens the app on one of the named presets.
 
-import { defaultState, sizeById, History, copyState } from './state.js';
+import { defaultState, sizeById, applyPreset, History, copyState } from './state.js';
 import { PhotoStore } from './photos.js';
 import { wireEditor } from './editor.js';
 import { renderCover } from './cover.js';
@@ -32,6 +33,12 @@ export function redraw() {
     photos,
     redraw,
     renderCover,
+    applyPreset: (id) => {
+      state = applyPreset(state, id);
+      history.push(copyState(state));
+      editor.syncControls();
+      redraw();
+    },
     exportPng: async () => {
       const off = document.createElement('canvas');
       off.width = size.w;
@@ -66,6 +73,13 @@ if (params.get('shot')) {
   });
 } else {
   // A fresh visitor starts with the Boulevard sample already in the panels.
+  // A ?preset= opens on that named look instead of the default — and it is
+  // recorded in the undo history, so Ctrl+Z after a random look returns to it.
+  const preset = params.get('preset');
+  if (preset) {
+    state = applyPreset(state, preset);
+    history.push(copyState(state));
+  }
   await photos.addSample('boulevard');
   await photos.addSample('pier');
   editor.syncControls();

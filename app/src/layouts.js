@@ -1,8 +1,9 @@
 // Panel layouts: where each photo sits on the cover. Every layout returns its
 // panels as fractions of the content area (the cover above the title band),
 // plus how tall that title band is. Tilted panels also carry a rotation.
+// Eight layouts: the classic grids plus a two-up duo and a wide banner.
 
-/** The six layouts, in the order the buttons show them. */
+/** The eight layouts, in the order the buttons show them. */
 export const LAYOUTS = [
   { id: 'grid4', name: 'Four Panel', panels: 4, band: 0.24 },
   { id: 'hero3', name: 'Hero + Three', panels: 4, band: 0.24 },
@@ -10,6 +11,8 @@ export const LAYOUTS = [
   { id: 'tilted', name: 'Tilted Snaps', panels: 3, band: 0.26 },
   { id: 'nine', name: 'Nine Panel', panels: 9, band: 0.20 },
   { id: 'trio', name: 'Strip Trio', panels: 3, band: 0.24 },
+  { id: 'duo', name: 'Duo', panels: 2, band: 0.24 },
+  { id: 'banner', name: 'Banner + Three', panels: 4, band: 0.22 },
 ];
 
 /** Finds a layout by id, falling back to the first one. */
@@ -71,6 +74,23 @@ export function layoutPanels(layoutId, w, h) {
         x: col(i % 3, 3), y: row(Math.floor(i / 3), 3),
         w: colW(3), h: rowH(3), rot: 0, snap: false,
       }));
+    case 'duo':
+      // Two tall panels side by side: a portrait pair, faces stay large.
+      return [0, 1].map((i) => ({
+        x: col(i, 2), y: cy, w: colW(2), h: ch, rot: 0, snap: false,
+      }));
+    case 'banner': {
+      // One wide banner across the top, three small panels beneath it.
+      const bannerH = ch * 0.58;
+      const stripY = cy + bannerH + g;
+      const stripH = ch - bannerH - g;
+      return [
+        { x: cx, y: cy, w: cw, h: bannerH, rot: 0, snap: false },
+        ...[0, 1, 2].map((i) => ({
+          x: col(i, 3), y: stripY, w: colW(3), h: stripH, rot: 0, snap: false,
+        })),
+      ];
+    }
     case 'trio':
     default:
       return [0, 1, 2].map((i) => ({
