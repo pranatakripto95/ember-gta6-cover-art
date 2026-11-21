@@ -1,81 +1,43 @@
-// A tiny static server for app/ (Node 22, standard library only), so an entry can be tried
-// locally without a build step: `node serve.ts` serves app/ on http://localhost:8080
-// (or `node serve.ts --port 9000 --host 0.0.0.0` to listen elsewhere).
-// It sends the MIME types an offline web app needs, refuses any path outside app/, logs
-// each request to the console, and otherwise does nothing clever: this is a development
-// convenience, not a web server for the internet.
-import { createReadStream, statSync } from 'node:fs';
-import { createServer } from 'node:http';
-import { extname, join, normalize, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+// Ember Cover Art — a tiny static server for trying the app locally.
+//
+// Serves app/ on http://localhost:8080 (or $PORT). No build step, no
+// network requests: every file comes from app/ on this machine.
+// Run it with `node serve.ts`, then open the printed address.
 
-const root = resolve(fileURLToPath(new URL('./app', import.meta.url)));
-const args = process.argv.slice(2);
-const portIndex = args.indexOf('--port');
-const requested = portIndex === -1 ? 8080 : Number(args[portIndex + 1]);
-const port = Number.isInteger(requested) && requested > 0 && requested < 65536 ? requested : 8080;
-const hostIndex = args.indexOf('--host');
-const host = hostIndex === -1 ? '127.0.0.1' : (args[hostIndex + 1] || '127.0.0.1');
+import * as http from "node:http";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const MIME: Record<string, string> = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.webp': 'image/webp',
-  '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon',
-  '.woff2': 'font/woff2',
-  '.woff': 'font/woff',
-  '.ttf': 'font/ttf',
-  '.otf': 'font/otf',
-  '.bin': 'application/octet-stream',
-  '.wasm': 'application/wasm',
-  '.wav': 'audio/wav',
-  '.mp3': 'audio/mpeg',
-  '.ogg': 'audio/ogg',
-  '.txt': 'text/plain; charset=utf-8',
+const appRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "app");
+const port = Number(process.env.PORT || 8080);
+
+const TYPES = {
+  ".html": "text/html; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
 };
 
-createServer((request, response) => {
-  const url = new URL(request.url ?? '/', 'http://localhost');
-  let pathname: string;
-  try {
-    pathname = decodeURIComponent(url.pathname);
-  } catch {
-    console.log(`${request.method} ${request.url} -> 400`);
-    response.writeHead(400).end('bad request');
+const server = http.createServer((req, res) => {
+  const raw = decodeURIComponent(new URL(req.url || "/", "http://localhost").pathname);
+  const rel = raw === "/" ? "index.html" : raw.replace(/^\/+/, "");
+  const file = path.join(appRoot, rel);
+  if (!file.startsWith(appRoot) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
+    res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+    res.end("Not found: " + raw + "\n");
     return;
   }
-  if (pathname.endsWith('/')) pathname += 'index.html';
-  const file = resolve(join(root, normalize(pathname)));
-  if (file !== root && !file.startsWith(root + sep)) {
-    console.log(`${request.method} ${request.url} -> 403`);
-    response.writeHead(403).end('forbidden');
-    return;
-  }
-  let size: number;
-  try {
-    const stats = statSync(file);
-    if (!stats.isFile()) throw new Error('not a file');
-    size = stats.size;
-  } catch {
-    console.log(`${request.method} ${request.url} -> 404`);
-    response.writeHead(404).end('not found');
-    return;
-  }
-  console.log(`${request.method} ${request.url} -> 200 (${size} bytes)`);
-  response.writeHead(200, {
-    'content-type': MIME[extname(file).toLowerCase()] ?? 'application/octet-stream',
-    'content-length': size,
-    'cache-control': 'no-store',
-  });
-  createReadStream(file).pipe(response);
-}).listen(port, host, () => {
-  console.log(`app/ is on http://${host === '0.0.0.0' ? 'localhost' : host}:${port}`);
+  const type = TYPES[path.extname(file).toLowerCase()] || "application/octet-stream";
+  res.writeHead(200, { "content-type": type });
+  fs.createReadStream(file).pipe(res);
+});
+
+server.listen(port, () => {
+  console.log("Ember Cover Art at http://localhost:" + port + "/");
 });

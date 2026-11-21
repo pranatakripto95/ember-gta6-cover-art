@@ -1,217 +1,223 @@
-// Lettering: the poster's title block, neon script subtitle, kicker line,
-// badge ribbon and heat stars — all drawn in code, no font files, no game
-// artwork. The kicker is a small tracked-out caps line above the subtitle;
-// a gradient bar under the title ties the block together.
+// Ember Cover Art — lettering: kicker ribbons, bold titles, badges.
+//
+// All lettering is drawn with system fonts, so the app ships no font
+// file and copies nothing from any game. The heavy title face is a
+// stack that lands on Arial Black on most machines and falls back to a
+// bold sans; the subtitle uses an italic serif for contrast. Each
+// lettering style is a small table of colours and treatments, and the
+// draw functions take a style id, so presets can swap the whole look
+// with one field.
 
-/** Splits a title into at most two centred lines that fit `maxWidth`. */
-export function wrapTitle(ctx, text, maxWidth, startSize) {
-  const words = text.trim().toUpperCase().split(/\s+/).filter(Boolean);
-  if (!words.length) return { lines: [], size: startSize };
-  let size = startSize;
-  const fit = (sz) => {
-    ctx.font = titleFont(sz);
-    const lines = [];
-    let line = '';
-    for (const word of words) {
-      const next = line ? `${line} ${word}` : word;
-      if (ctx.measureText(next).width <= maxWidth || !line) line = next;
-      else { lines.push(line); line = word; }
-    }
-    if (line) lines.push(line);
-    return lines;
-  };
-  let lines = fit(size);
-  while (lines.length > 2 && size > 24) { size -= 4; lines = fit(size); }
-  while (lines.some((l) => ctx.measureText(l).width > maxWidth) && size > 24) {
-    size -= 2;
-    ctx.font = titleFont(size);
-    lines = fit(size);
+export const LETTERING_STYLES = [
+  {
+    id: "sunset", name: "Sunset Bold", desc: "White type, sunset gradient",
+    fill: ["#fff7e6", "#ffd166", "#ff7a2f"], stroke: "#2b1055", shadow: "rgba(43,16,85,0.55)",
+    kickerBg: "#ff7a2f", kickerFg: "#2b1055", subtitle: "#ffe9c9",
+  },
+  {
+    id: "neon", name: "Neon Script", desc: "Hot pink glow on dark",
+    fill: ["#ffffff", "#ffb3d9", "#ff2d78"], stroke: "#1a0533", shadow: "rgba(255,45,120,0.65)",
+    kickerBg: "#ff2d78", kickerFg: "#ffffff", subtitle: "#ffd6e8",
+  },
+  {
+    id: "chrome", name: "Chrome", desc: "Silver metal, dark outline",
+    fill: ["#ffffff", "#d7dce3", "#8b939e"], stroke: "#111827", shadow: "rgba(0,0,0,0.6)",
+    kickerBg: "#111827", kickerFg: "#f8fafc", subtitle: "#e5e7eb",
+  },
+  {
+    id: "badge", name: "Badge Pop", desc: "Candy colours, thick outline",
+    fill: ["#fffbe6", "#fde047", "#f472b6"], stroke: "#3b0764", shadow: "rgba(59,7,100,0.5)",
+    kickerBg: "#facc15", kickerFg: "#3b0764", subtitle: "#fef3c7",
+  },
+  {
+    id: "mono", name: "Mono Post", desc: "Typewriter calm, blue night",
+    fill: ["#f1f5f9", "#c7d2fe", "#818cf8"], stroke: "#020617", shadow: "rgba(2,6,23,0.6)",
+    kickerBg: "#6366f1", kickerFg: "#ffffff", subtitle: "#c7d2fe",
+  },
+];
+
+export function letteringById(id) {
+  return LETTERING_STYLES.find((s) => s.id === id) || LETTERING_STYLES[0];
+}
+
+const TITLE_FAMILY = '"Arial Black", "Helvetica Neue", Arial, sans-serif';
+const KICKER_FAMILY = '"Helvetica Neue", Arial, sans-serif';
+const SUBTITLE_FAMILY = 'Georgia, "Times New Roman", serif';
+
+// Shrink a font until the text fits maxW, starting from startPx.
+// Returns the pixel size that fits (never below 40% of the start).
+export function fitFont(ctx, text, maxW, startPx, family, weight) {
+  let px = startPx;
+  ctx.font = weight + " " + px + "px " + family;
+  while (px > startPx * 0.4 && ctx.measureText(text).width > maxW) {
+    px = Math.floor(px * 0.92);
+    ctx.font = weight + " " + px + "px " + family;
   }
-  return { lines, size };
+  return px;
 }
 
-/** The heavy condensed face the title uses (system fonts only). */
-export function titleFont(size) {
-  return `900 ${size}px "Arial Black", "Arial Narrow", Impact, "Helvetica Neue", sans-serif`;
-}
-
-/** The script face for the subtitle (system cursive only). */
-export function scriptFont(size) {
-  return `italic 700 ${size}px "Segoe Script", "Brush Script MT", "Snell Roundhand", cursive`;
-}
-
-/** The tracked-out caps face for the kicker line. */
-export function kickerFont(size) {
-  return `800 ${size}px "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;
-}
-
-/**
- * Draws the title lines centred at `cx`, the first line's baseline at `y`,
- * filled with a vertical gradient and edged in white over black.
- */
-export function drawTitle(ctx, lines, size, cx, y, colours) {
-  const grad = ctx.createLinearGradient(0, y - size, 0, y + size * (lines.length - 0.4));
-  colours.forEach((c, i) => grad.addColorStop(i / Math.max(1, colours.length - 1), c));
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
-  try { ctx.letterSpacing = '1px'; } catch { /* older canvas: no letter spacing */ }
-  lines.forEach((line, i) => {
-    const ly = y + i * size * 1.04;
-    ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,0.55)';
-    ctx.shadowBlur = size * 0.18;
-    ctx.shadowOffsetY = size * 0.05;
-    ctx.font = titleFont(size);
-    ctx.lineJoin = 'round';
-    ctx.strokeStyle = 'rgba(20, 5, 25, 0.9)';
-    ctx.lineWidth = size * 0.16;
-    ctx.strokeText(line, cx, ly);
-    ctx.fillStyle = grad;
-    ctx.fillText(line, cx, ly);
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-    ctx.lineWidth = Math.max(1.5, size * 0.02);
-    ctx.strokeText(line, cx, ly);
-    ctx.restore();
-  });
-  try { ctx.letterSpacing = '0px'; } catch { /* ignore */ }
-}
-
-/**
- * A short gradient bar under the title, as wide as the widest title line,
- * that anchors the title block. Returns the bar's width, for layout.
- */
-export function drawTitleBar(ctx, lines, size, cx, y, colours) {
-  if (!lines.length) return 0;
-  ctx.save();
-  ctx.font = titleFont(size);
-  const widest = Math.max(...lines.map((l) => ctx.measureText(l).width));
-  const barW = Math.min(widest * 0.62, ctx.canvas.width * 0.5);
-  const barH = Math.max(4, size * 0.07);
-  const grad = ctx.createLinearGradient(cx - barW / 2, 0, cx + barW / 2, 0);
-  colours.forEach((c, i) => grad.addColorStop(i / Math.max(1, colours.length - 1), c));
-  ctx.fillStyle = grad;
-  roundRectPath(ctx, cx - barW / 2, y, barW, barH, barH / 2);
-  ctx.fill();
-  ctx.restore();
-  return barW;
-}
-
-/** Draws the glowing script subtitle centred at (`cx`, `y`). */
-export function drawSubtitle(ctx, text, size, cx, y, colour) {
-  if (!text.trim()) return;
-  ctx.save();
-  ctx.font = scriptFont(size);
-  ctx.textAlign = 'center';
-  ctx.shadowColor = colour;
-  ctx.shadowBlur = size * 0.6;
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText(text.trim(), cx, y);
-  ctx.shadowBlur = size * 0.25;
-  ctx.fillStyle = colour;
-  ctx.fillText(text.trim(), cx, y);
-  ctx.restore();
-}
-
-/**
- * Draws the kicker — a small tracked-out caps line — centred at (`cx`, `y`).
- * Returns the height it took, so the title block can stack below it.
- */
-export function drawKicker(ctx, text, size, cx, y, colour) {
-  const label = text.trim().toUpperCase();
-  if (!label) return 0;
-  ctx.save();
-  ctx.font = kickerFont(size);
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
-  try { ctx.letterSpacing = `${Math.max(2, size * 0.28)}px`; } catch { /* older canvas */ }
-  ctx.fillStyle = colour;
-  ctx.shadowColor = 'rgba(0,0,0,0.5)';
-  ctx.shadowBlur = size * 0.5;
-  ctx.fillText(label, cx, y);
-  ctx.restore();
-  try { ctx.letterSpacing = '0px'; } catch { /* ignore */ }
-  return size * 1.2;
-}
-
-/** A five-pointed star path centred at (`cx`, `cy`) with outer radius `r`. */
-export function starPath(ctx, cx, cy, r) {
-  const inner = r * 0.45;
-  ctx.beginPath();
-  for (let i = 0; i < 10; i += 1) {
-    const angle = (Math.PI / 5) * i - Math.PI / 2;
-    const rad = i % 2 === 0 ? r : inner;
-    const x = cx + Math.cos(angle) * rad;
-    const y = cy + Math.sin(angle) * rad;
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  }
-  ctx.closePath();
-}
-
-/** Draws the heat stars (filled gold, empty ones just outlined) at top right. */
-export function drawStars(ctx, count, w) {
-  const r = Math.max(10, w * 0.024);
-  const gap = r * 2.35;
-  const y = r * 1.7;
-  for (let i = 0; i < 5; i += 1) {
-    const cx = w - r * 1.4 - (4 - i) * gap;
-    starPath(ctx, cx, y, r);
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = Math.max(2, r * 0.14);
-    ctx.strokeStyle = '#ffffff';
-    if (i < count) {
-      ctx.fillStyle = '#ffd76a';
-      ctx.fill();
+// Wrap a title into at most two lines, breaking on word boundaries and
+// keeping words whole. Long single words are split by the fit step.
+export function wrapTitle(ctx, text, maxW, px) {
+  const words = String(text || "").split(/\s+/).filter(Boolean);
+  if (!words.length) return [""];
+  const lines = [];
+  let line = "";
+  for (const word of words) {
+    const trial = line ? line + " " + word : word;
+    ctx.font = "900 " + px + "px " + TITLE_FAMILY;
+    if (ctx.measureText(trial).width <= maxW || !line) {
+      line = trial;
     } else {
-      ctx.fillStyle = 'rgba(255,255,255,0.22)';
-      ctx.fill();
+      lines.push(line);
+      line = word;
+      if (lines.length === 2) break;
     }
-    ctx.stroke();
   }
+  if (line) lines.push(line);
+  return lines.slice(0, 2);
 }
 
-/**
- * Draws the tilted badge ribbon at top left with the badge words on it.
- * Long badges shrink their type so the ribbon never runs off the cover.
- */
-export function drawBadge(ctx, text, w, h) {
-  const label = text.trim().toUpperCase();
-  if (!label) return;
-  let size = Math.max(13, w * 0.022);
+// The kicker: a short line of small caps on a slanted ribbon bar.
+// The ribbon is measured from the text, then placed by alignment
+// inside the zone it is given, so centred kickers are truly centred.
+export function drawKicker(ctx, text, x, y, maxW, style, scale, align) {
+  const label = String(text || "").toUpperCase();
+  if (!label) return 0;
+  const s = scale || 1;
+  const px = Math.max(10, Math.round(15 * s));
   ctx.save();
-  const measure = (sz) => {
-    ctx.font = `900 ${sz}px "Arial Black", Impact, sans-serif`;
-    return ctx.measureText(label).width;
-  };
-  const maxW = w * 0.42;
-  while (measure(size) + size * 2.2 > maxW && size > 10) size -= 1;
-  const tw = measure(size);
-  const bw = tw + size * 2.2;
-  const bh = size * 2.1;
-  ctx.translate(w * 0.03, h * 0.018);
-  ctx.rotate(-0.07);
-  ctx.fillStyle = '#ff2e88';
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = Math.max(2, size * 0.12);
-  roundRectPath(ctx, 0, 0, bw, bh, bh * 0.28);
+  ctx.font = "800 " + px + "px " + KICKER_FAMILY;
+  const tw = Math.min(maxW, ctx.measureText(label).width + px * 1.6);
+  if (align === "center") x = x + (maxW - tw) / 2;
+  else if (align === "right") x = x + maxW - tw;
+  const h = px * 1.9;
+  const slant = h * 0.35;
+  ctx.beginPath();
+  ctx.moveTo(x + slant, y);
+  ctx.lineTo(x + tw, y);
+  ctx.lineTo(x + tw - slant, y + h);
+  ctx.lineTo(x, y + h);
+  ctx.closePath();
+  ctx.fillStyle = style.kickerBg;
   ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = '#ffffff';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(label, bw / 2, bh / 2 + size * 0.06);
+  ctx.fillStyle = style.kickerFg;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(label, x + slant * 0.9, y + h / 2 + 1);
+  ctx.restore();
+  return h;
+}
+
+// The big title, drawn in up to two lines with a gradient fill, a
+// dark outline and a soft drop shadow. The box gives the area to fill;
+// the text is centred or left-aligned per the zone.
+export function drawTitle(ctx, text, box, style, opts) {
+  const o = opts || {};
+  const scale = o.scale || 1;
+  const align = o.align || "center";
+  const tilt = o.tilt || 0;
+  const label = String(text || "").toUpperCase();
+  if (!label) return;
+  const maxW = box.w;
+  ctx.save();
+  // Size the title from the box, not from a fixed fraction of the
+  // canvas: start tall, then shrink only until the wrapped lines fit.
+  // Measuring the wrapped lines (not the whole unbroken string) keeps
+  // two-line titles as bold as one-line ones.
+  let px = Math.round(box.h * 0.48);
+  let lines = wrapTitle(ctx, label, maxW, px);
+  let guard = 0;
+  while (lines.length > 2 && px > 14 && guard++ < 40) {
+    px = Math.floor(px * 0.92);
+    lines = wrapTitle(ctx, label, maxW, px);
+  }
+  guard = 0;
+  while (px > 14 && guard++ < 60) {
+    ctx.font = "900 " + px + "px " + TITLE_FAMILY;
+    const widest = Math.max.apply(null, lines.map((l) => ctx.measureText(l).width));
+    if (widest <= maxW) break;
+    px = Math.floor(px * 0.94);
+    lines = wrapTitle(ctx, label, maxW, px);
+  }
+  const lineH = px * 1.04;
+  const totalH = lines.length * lineH;
+  let startY = box.y + (box.h - totalH) / 2;
+  if (tilt) {
+    const cx = align === "left" ? box.x : align === "right" ? box.x + box.w : box.x + box.w / 2;
+    ctx.translate(cx, startY + totalH / 2);
+    ctx.rotate((tilt * Math.PI) / 180);
+    ctx.translate(-cx, -(startY + totalH / 2));
+  }
+  ctx.textAlign = align;
+  ctx.textBaseline = "middle";
+  lines.forEach((line, i) => {
+    const y = startY + i * lineH + lineH / 2;
+    const tx = align === "left" ? box.x : align === "right" ? box.x + box.w : box.x + box.w / 2;
+    const grad = ctx.createLinearGradient(box.x, y - px / 2, box.x, y + px / 2);
+    const stops = style.fill || ["#ffffff", "#ffd166"];
+    stops.forEach((c, j) => grad.addColorStop(j / Math.max(1, stops.length - 1), c));
+    ctx.font = "900 " + px + "px " + TITLE_FAMILY;
+    ctx.shadowColor = style.shadow || "rgba(0,0,0,0.5)";
+    ctx.shadowBlur = Math.round(px * 0.16);
+    ctx.shadowOffsetY = Math.round(px * 0.05);
+    ctx.lineWidth = Math.max(2, Math.round(px * 0.09));
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = style.stroke || "#111";
+    ctx.strokeText(line, tx, y);
+    ctx.shadowColor = "transparent";
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.fillStyle = grad;
+    ctx.fillText(line, tx, y);
+  });
   ctx.restore();
 }
 
-/** A rounded-rectangle path (roundRect is not in every canvas yet). */
-export function roundRectPath(ctx, x, y, w, h, r) {
-  const rad = Math.min(r, w / 2, h / 2);
+// The subtitle: one italic serif line under the title.
+export function drawSubtitle(ctx, text, x, y, maxW, style, scale) {
+  const label = String(text || "");
+  if (!label) return;
+  const s = scale || 1;
+  let px = Math.round(19 * s);
+  ctx.save();
+  px = fitFont(ctx, label, maxW, px, SUBTITLE_FAMILY, "italic 600");
+  ctx.font = "italic 600 " + px + "px " + SUBTITLE_FAMILY;
+  ctx.fillStyle = style.subtitle || "#ffffff";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.shadowColor = "rgba(0,0,0,0.55)";
+  ctx.shadowBlur = Math.round(px * 0.25);
+  ctx.fillText(label, x, y);
+  ctx.restore();
+}
+
+// A round stamp badge: a ring, a star, and two short lines of text.
+// Used in a corner to sign the poster like a postmark.
+export function drawBadge(ctx, cx, cy, r, top, bottom) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(-0.12);
   ctx.beginPath();
-  ctx.moveTo(x + rad, y);
-  ctx.arcTo(x + w, y, x + w, y + h, rad);
-  ctx.arcTo(x + w, y + h, x, y + h, rad);
-  ctx.arcTo(x, y + h, x, y, rad);
-  ctx.arcTo(x, y, x + w, y, rad);
-  ctx.closePath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(10,10,25,0.72)";
+  ctx.fill();
+  ctx.lineWidth = Math.max(2, r * 0.06);
+  ctx.strokeStyle = "#ffd166";
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 0.82, 0, Math.PI * 2);
+  ctx.lineWidth = Math.max(1, r * 0.03);
+  ctx.strokeStyle = "rgba(255,209,102,0.7)";
+  ctx.stroke();
+  ctx.fillStyle = "#ffd166";
+  ctx.font = "900 " + Math.round(r * 0.42) + "px " + TITLE_FAMILY;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("★", 0, -r * 0.34);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "800 " + Math.round(r * 0.2) + "px " + KICKER_FAMILY;
+  ctx.fillText(String(top || "SUNSET").toUpperCase(), 0, r * 0.08);
+  ctx.fillText(String(bottom || "EST. 2026").toUpperCase(), 0, r * 0.36);
+  ctx.restore();
 }

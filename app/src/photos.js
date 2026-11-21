@@ -1,97 +1,129 @@
-// Photos: the two free sample photos bundled with the app, plus any photo
-// the person adds from their own machine. Nothing is ever uploaded. Uploaded
-// photos can be removed again; their object URLs are revoked when they go.
+// Ember Cover Art — photos: loading, user files, and cover-fit maths.
+//
+// Photos are read on the person's own machine and never uploaded. A photo
+// object carries its own crop: a zoom, a pan offset, and a focus point
+// (where the interesting part is). The renderer asks coverFit() for the
+// source rectangle that fills a panel from that crop.
 
-/** The bundled samples (made with an image model for this app, free to use). */
-export const SAMPLES = [
-  { id: 'boulevard', name: 'Boulevard', src: 'samples/boulevard.jpg' },
-  { id: 'pier', name: 'Pier', src: 'samples/pier.jpg' },
-];
+let photoCounter = 3;
 
-/** Loads an image from a URL, resolving once it can be drawn. */
-export function loadImage(url) {
+export function newPhotoId() {
+  return "photo-" + photoCounter++;
+}
+
+export function samplePhotos() {
+  return [
+    { id: "sample-boulevard", src: "samples/boulevard.jpg", label: "Boulevard" },
+    { id: "sample-pier", src: "samples/pier.jpg", label: "Pier" },
+  ];
+}
+
+export function photoById(state, id) {
+  return state.photos.find((p) => p.id === id) || state.photos[0] || null;
+}
+
+// Load an image element from a URL or a data: URI. The promise rejects
+// with a plain Error so callers can show a friendly message.
+export function loadImage(src) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error(`could not load ${url}`));
-    img.src = url;
+    img.onerror = () => reject(new Error("Could not load image: " + src));
+    img.src = src;
   });
 }
 
-/**
- * A small store of loaded photos: id -> image, in the order they were added,
- * plus the thumbnail element each one shows in the editor.
- */
-export class PhotoStore {
-  constructor() {
-    this.images = new Map();
-    this.order = [];
-    this.urls = new Map();
-    this.uploadCount = 0;
-  }
-
-  /** Loads a bundled sample by id and registers it. */
-  async addSample(id) {
-    const sample = SAMPLES.find((s) => s.id === id);
-    if (!sample) return null;
-    if (!this.images.has(id)) {
-      this.images.set(id, await loadImage(sample.src));
-      this.order.push(id);
+// Turn a file from <input type=file> into a photo object. The file is
+// read as a data: URI, so it stays in the browser and is never sent
+// anywhere. Very large photos are kept as-is; the canvas downsamples
+// them when it draws, which is fast enough at poster sizes.
+export function readUserFile(file) {
+  return new Promise((resolve, reject) => {
+    if (!file || !file.type || !file.type.startsWith("image/")) {
+      reject(new Error("That file is not an image."));
+      return;
     }
-    return id;
-  }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        resolve({
+          id: newPhotoId(),
+          src: String(reader.result),
+          label: file.name.replace(/\.[^.]+$/, "").slice(0, 24) || "Photo",
+          zoom: 1.1,
+          panX: 0,
+          panY: 0,
+          focusX: 0.5,
+          focusY: 0.42,
+          width: img.naturalWidth,
+          height: img.naturalHeight,
+        });
+      };
+      img.onerror = () => reject(new Error("Could not read that image file."));
+      img.src = String(reader.result);
+    };
+    reader.onerror = () => reject(new Error("Could not read that file."));
+    reader.readAsDataURL(file);
+  });
+}
 
-  /** Loads a file the person picked and registers it under a fresh id. */
-  async addFile(file) {
-    const id = `upload-${this.uploadCount += 1}`;
-    const url = URL.createObjectURL(file);
-    this.urls.set(id, url);
-    try {
-      this.images.set(id, await loadImage(url));
-    } catch (e) {
-      URL.revokeObjectURL(url);
-      this.urls.delete(id);
-      throw e;
-    }
-    this.order.push(id);
-    return id;
-  }
+// Cover-fit with a focus point. Given an image, a destination box, and a
+// photo's crop settings, return the source rectangle to draw and the
+// destination rectangle to draw it into. The focus point is where the
+// crop centres itself; panX/panY nudge it afterwards, in fractions of
+// the box, and zoom scales the crop around that centre.
+export function coverFit(img, box, photo) {
+  const iw = img.naturalWidth || img.width;
+  const ih = img.naturalHeight || img.height;
+  const bw = box.w;
+  const bh = box.h;
+  const zoom = Math.max(0.5, Math.min(4, (photo && photo.zoom) || 1));
+  const focusX = photo && typeof photo.focusX === "number" ? photo.focusX : 0.5;
+  const focusY = photo && typeof photo.focusY === "number" ? photo.focusY : 0.5;
+  const panX = (photo && photo.panX) || 0;
+  const panY = (photo && photo.panY) || 0;
 
-  /**
-   * Removes a photo from the store (uploads only; samples stay available).
-   * Returns true when something was removed.
-   */
-  remove(id) {
-    if (!this.images.has(id) || SAMPLES.some((s) => s.id === id)) return false;
-    this.images.delete(id);
-    this.order = this.order.filter((x) => x !== id);
-    const url = this.urls.get(id);
-    if (url) {
-      URL.revokeObjectURL(url);
-      this.urls.delete(id);
-    }
-    return true;
+  const boxAspect = bw / bh;
+  const imgAspect = iw / ih;
+  let sw;
+  let sh;
+  if (imgAspect > boxAspect) {
+    sh = ih;
+    sw = ih * boxAspect;
+  } else {
+    sw = iw;
+    sh = iw / boxAspect;
   }
+  sw /= zoom;
+  sh /= zoom;
 
-  /** The image for an id, or null. */
-  get(id) {
-    return this.images.get(id) || null;
-  }
+  // Centre the crop on the focus point, then apply the pan nudge.
+  let sx = focusX * iw - sw / 2 + panX * sw;
+  let sy = focusY * ih - sh / 2 + panY * sh;
+  sx = Math.max(0, Math.min(iw - sw, sx));
+  sy = Math.max(0, Math.min(ih - sh, sy));
 
-  /** Every photo's id, in the order added. */
-  ids() {
-    return [...this.order];
-  }
+  return { sx, sy, sw, sh, dx: box.x, dy: box.y, dw: bw, dh: bh };
+}
 
-  /** How many photos the store holds. */
-  count() {
-    return this.order.length;
-  }
+// Which photo fills a panel. Layouts ask for a slot index; the state
+// holds one photo id per slot, and slots wrap around the list so a
+// two-photo poster can still fill nine panels.
+export function photoForPanel(state, index) {
+  const slots = state.panelPhotos && state.panelPhotos.length
+    ? state.panelPhotos
+    : state.photos.map((p) => p.id);
+  const id = slots[index % slots.length];
+  return photoById(state, id);
+}
 
-  /** A short display name for a thumbnail's tooltip. */
-  name(id) {
-    const sample = SAMPLES.find((s) => s.id === id);
-    if (sample) return sample.name;
-    return `Photo ${id.replace('upload-', '')}`;
+// Point-in-rect hit test, used when the user clicks the preview canvas
+// to pick a panel.
+export function hitPanel(rects, x, y) {
+  for (let i = rects.length - 1; i >= 0; i--) {
+    const r = rects[i];
+    if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return i;
   }
+  return -1;
 }

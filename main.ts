@@ -1,41 +1,53 @@
-// Ember Cover Art — a gta6-cover-art-01 entry (Node 22, standard library only): the app is this directory's app/
-// folder, plain static files a desktop browser loads offline (app/index.html and its ES modules, no library and no
-// network request), and the program hands it in. It copies app/ and screenshots/ from beside this file to /output
-// and writes /output/dossier.json, the summary the judge reads, with the vendored make.fun library. The app turns a
-// photo and a caption into multi-panel poster art — eight layouts, seven sunset/neon grades, five one-tap presets,
-// a random look, per-panel crop and pan with aspect-aware smart crop, kicker line, gradient title lettering, heat
-// stars and a badge ribbon — exported as a PNG in 1080x1080, 1080x1350 or 1920x1080. Its two sample photos
-// (app/samples/) were made for make.fun with an image model and are free to use. Put your 3 or 4 PNG or JPEG
-// screenshots in screenshots/ (the first by name is the cover) and run it.
+// Ember Cover Art — the entry program (Node 22, standard library only).
 //
-// Serve it locally with `node serve.ts`, then open http://localhost:8080.
-// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
-//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+// It hands the app in: it copies app/ and screenshots/ from this
+// repository into the output directory and writes dossier.json with
+// buildDossier from vendor/makefun-app.ts. It runs twice in grading
+// and must write the same bytes both times, so the copy walks entries
+// in sorted order and the dossier library does the rest.
 
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { buildDossier } from './vendor/makefun-app.ts';
+import { buildDossier } from "./vendor/makefun-app.ts";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const here = fileURLToPath(new URL('.', import.meta.url));
-const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+const repoRoot = path.dirname(fileURLToPath(import.meta.url));
+const outDir = process.env.MAKEFUN_OUTPUT_DIR || "/output";
 
-mkdirSync(out, { recursive: true });
-cpSync(join(here, 'app'), join(out, 'app'), { recursive: true });
-mkdirSync(join(out, 'screenshots'), { recursive: true });
-if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
+// The gate's caps, from the competition kit: the dossier text is
+// capped at 160 KiB, screenshots at 4 files of 256 KiB, and app/ at
+// 993 entries and 48 MiB with paths under 1,000 bytes.
+const CAPS = {
+  text_max_bytes: 163840,
+  screenshots: { max: 4, max_bytes: 262144 },
+  app_max_files: 993,
+  app_max_bytes: 48 * 1024 * 1024,
+  app_path_max_bytes: 1000,
+};
 
-// The scorer's own caps (reference/gate.json): only text_max_bytes shapes the bytes; the others refuse an entry the
-// scorer would refuse (more than 4 screenshots or one over 256 KiB; more than 993 files in app/ or 48 MiB of app
-// files, in all, or a path under app/ over 1000 bytes: app/ counts beside /output's own 1000-entry cap, its
-// screenshots/ and dossier.json).
-writeFileSync(
-  join(out, 'dossier.json'),
-  buildDossier(out, {
-    text_max_bytes: 163840,
-    screenshots: { max: 4, max_bytes: 262144 },
-    app_max_files: 993,
-    app_max_bytes: 50331648,
-    app_path_max_bytes: 1000,
-  }),
-);
+function copyTree(src, dest) {
+  fs.mkdirSync(dest, { recursive: true });
+  const entries = fs.readdirSync(src, { withFileTypes: true });
+  entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  for (const entry of entries) {
+    const from = path.join(src, entry.name);
+    const to = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyTree(from, to);
+    } else if (entry.isFile()) {
+      fs.copyFileSync(from, to);
+    }
+  }
+}
+
+function main() {
+  fs.rmSync(outDir, { recursive: true, force: true });
+  fs.mkdirSync(outDir, { recursive: true });
+  copyTree(path.join(repoRoot, "app"), path.join(outDir, "app"));
+  copyTree(path.join(repoRoot, "screenshots"), path.join(outDir, "screenshots"));
+  const dossier = buildDossier(outDir, CAPS);
+  fs.writeFileSync(path.join(outDir, "dossier.json"), Buffer.from(dossier));
+  console.log("wrote " + outDir + " (dossier " + dossier.length + " bytes)");
+}
+
+main();

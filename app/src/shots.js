@@ -1,45 +1,65 @@
-// Fixed scenes for screenshots: ?shot=cover shows the finished cover alone;
-// ?shot=editor shows the editor with a sample photo loaded. Query keys:
-// photo (boulevard|pier), caption, subtitle, kicker, badge, layout, grade,
-// size, stars, preset. A preset sets the whole look first; the other keys
-// then override single parts of it. The panels are smart-cropped so faces
-// survive every layout's crop. window.__shotReady is set once painted.
+// Ember Cover Art — screenshot scenes: ?shot=cover|editor|portrait|square.
+//
+// The app reads one query parameter, `shot`, and stages itself for a
+// screenshot: it picks a preset, a size and a caption, and reports when
+// the first render is done through window.__emberShotDone. The browser
+// test drives these scenes to take the entry's screenshots. In normal
+// use there is no parameter and the app opens exactly as the user left
+// it, with the sample photos already loaded.
 
-import { smartCropAll } from './facecrop.js';
-import { applyPreset, sizeById } from './state.js';
+import { PRESETS, presetPatch } from "./state.js";
 
-/**
- * Sets up a screenshot scene. `ctx` carries the state, the photo store and
- * the functions that apply a state and repaint the preview.
- */
-export async function runShot(shot, query, ctx) {
-  const { getState, applyState, photos, redraw } = ctx;
-  let state = getState();
-  const preset = query.get('preset');
-  if (preset) state = applyPreset(state, preset);
-  state.layout = query.get('layout') || state.layout;
-  state.grade = query.get('grade') || state.grade;
-  state.size = query.get('size') || state.size;
-  state.title = query.get('caption') || state.title;
-  if (query.get('subtitle') !== null) state.subtitle = query.get('subtitle');
-  if (query.get('kicker') !== null) state.kicker = query.get('kicker');
-  if (query.get('stars') !== null) state.stars = Number(query.get('stars'));
-  if (query.get('badge') !== null) state.badge = query.get('badge');
-  const photo = query.get('photo') || 'boulevard';
-  await photos.addSample('boulevard');
-  await photos.addSample('pier');
-  // Spread the chosen photo and the other sample across the panels.
-  const n = state.panels.length;
-  const other = photo === 'boulevard' ? 'pier' : 'boulevard';
-  for (let i = 0; i < n; i += 1) {
-    state.panels[i].photo = i % 2 === 0 ? photo : other;
+export const SHOT_SCENES = {
+  cover: {
+    presetId: "golden-ave", sizeId: "wide",
+    title: "NEON SHORE", kicker: "WELCOME TO THE SUNSET",
+    subtitle: "a sunset story in three panels",
+    chrome: false,
+  },
+  editor: {
+    presetId: "night-drive", sizeId: "wide",
+    title: "NIGHT DRIVE", kicker: "AFTER DARK, EVERYTHING GLOWS",
+    subtitle: "neon streets, no destination",
+    chrome: true,
+  },
+  portrait: {
+    presetId: "rose-hour", sizeId: "portrait",
+    title: "ROSE HOUR", kicker: "THE SKY TURNED PINK AT SIX",
+    subtitle: "golden hour, kept forever",
+    chrome: false,
+  },
+  square: {
+    presetId: "miami-mornings", sizeId: "square",
+    title: "MIAMI MORNINGS", kicker: "SALT AIR AND PALM TREES",
+    subtitle: "three frames from the coast",
+    chrome: false,
+  },
+};
+
+export function shotFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const shot = params.get("shot");
+    return shot && SHOT_SCENES[shot] ? shot : null;
+  } catch (err) {
+    return null;
   }
-  state.selectedPanel = 0;
-  const size = sizeById(state.size);
-  smartCropAll(state, photos, size.w, size.h);
-  applyState(state);
-  if (shot === 'cover') document.body.classList.add('shot-cover');
-  redraw();
-  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-  window.__shotReady = true;
+}
+
+// Apply a scene to the store. Returns the scene (or null) so the
+// caller can hide the editor chrome for cover-only shots.
+export function applyShot(store, shotId) {
+  const scene = SHOT_SCENES[shotId];
+  if (!scene) return null;
+  const preset = PRESETS.find((p) => p.id === scene.presetId) || PRESETS[0];
+  store.set({
+    ...presetPatch(preset),
+    sizeId: scene.sizeId,
+    title: scene.title,
+    kicker: scene.kicker,
+    subtitle: scene.subtitle,
+  });
+  document.body.dataset.shot = shotId;
+  if (!scene.chrome) document.body.classList.add("shot-cover");
+  return scene;
 }
