@@ -41,8 +41,12 @@ function copyTree(src, dest) {
 }
 
 function main() {
-  fs.rmSync(outDir, { recursive: true, force: true });
+  // The grader mounts the output directory, so the directory itself
+  // cannot be removed (EBUSY): clear only what is inside it.
   fs.mkdirSync(outDir, { recursive: true });
+  for (const entry of fs.readdirSync(outDir)) {
+    fs.rmSync(path.join(outDir, entry), { recursive: true, force: true });
+  }
   copyTree(path.join(repoRoot, "app"), path.join(outDir, "app"));
   copyTree(path.join(repoRoot, "screenshots"), path.join(outDir, "screenshots"));
   const dossier = buildDossier(outDir, CAPS);
