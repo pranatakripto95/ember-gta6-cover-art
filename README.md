@@ -7,14 +7,14 @@
 Built for the [make.fun gta6-cover-art-01 bounty](https://make.fun/bounty/gta6-cover-art-01).
 
 Turn any photo and a caption into a multi-panel sunset poster in the
-style of GTA 6's cover art — offline, in your browser, with the photos
-never leaving your machine.
+style of GTA 6's cover art. It runs entirely offline in the browser,
+and your photos never leave your machine.
 
 ## What it does
 
 - **Any photo:** add your own photos or use the two samples. Fill
-  several panels with one photo or several, crop and position each
-  one by dragging on the poster, scrolling to zoom, or with the
+  several panels with one photo or several, then crop and position
+  each one by dragging on the poster, scrolling to zoom, or with the
   sliders. A smart-crop button finds the busiest, warmest part of a
   photo and centres the crop on it.
 - **Twelve layouts:** a hero with a strip, equal columns, grids up to
